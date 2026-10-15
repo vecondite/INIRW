@@ -20,7 +20,7 @@ std::string trim(std::string_view str, std::string_view tT){
     return std::string(str.substr(s, e-s+1));
 }
 
-std::string_view spaces = " \t\r\n";
+constexpr std::string_view spaces = " \t\r\n";
 
 int main(){
     std::ifstream f("test.ini");
@@ -45,29 +45,11 @@ int main(){
                 }
             }
             size_t eq = fU(dL, '\\', "=");
-            std::string key;
-            if(eq==0){
-                key = "";
-            }else{
-                size_t kE = dL.find_last_not_of(spaces, eq-1);
-                key = dL.substr(0, kE+1);
-            }
-            std::string value;
-            if(eq==std::string::npos){
-                value = "";
-            }else{
-                size_t vS = dL.find_first_not_of(spaces, eq+1);
-                if(vS==std::string::npos){
-                    value = "";
-                }else{
-                    size_t vE = dL.find_last_not_of(spaces);
-                    value = dL.substr(vS, vE-vS+1);
-                }
-            }
+            std::string key = trim(dL.substr(0, eq), spaces);
+            std::string value = eq==std::string::npos ? "" : trim(dL.substr(eq+1), spaces);
 //            std::cout << dL << "\n";
             std::cout << "KEY = " << key << "\n" << "VALUE = " << value << "\n\n";
         }
-        f.close();
     }else{
         std::cerr << "Failed to open file.";
         return 1;
