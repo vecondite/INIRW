@@ -3,6 +3,9 @@
 #include <list>
 #include <vector>
 #include <unordered_map>
+#include <string>
+#include <string_view>
+#include <filesystem>
 
 template<typename kT, typename vT> class oMap{
     public:
@@ -120,7 +123,7 @@ std::string esc(std::string_view str, char escC, std::string_view filter){
 }
 
 constexpr std::string_view spaces = " \t\r\n";
-constexpr std::string_view kEsc = ";#=";
+constexpr std::string_view kEsc = ";#=[]";
 constexpr std::string_view vEsc = ";#";
 constexpr std::string_view sEsc = ";#]";
 
@@ -132,13 +135,11 @@ void rwFile(std::string_view file, bool write, Ini& rWD){
         std::cerr << "Valid write data is required to write!\n";
         return;
     }
-    Ini wC;
-    if(write) wC = rWD;
-    Ini& wD = write ? wC : rWD;
+    Ini& wD = rWD;
     size_t instOffset = 0;
     std::vector<std::string> wL;
     std::fstream f;
-    f.open(std::string{file}, std::ios::in);
+    f.open(std::string{file}, std::ios::in | std::ios::binary);
     std::string section = "";
     bool pD = wD.find("")!=wD.end();
     bool crlf = false;
@@ -174,7 +175,7 @@ void rwFile(std::string_view file, bool write, Ini& rWD){
                             wD.erase(rSect->first);
                         }
                     }
-                    section = uesc(dL.substr(1, sE-1), '\\');
+                    section = uesc(trim(dL.substr(1, sE-1),spaces), '\\');
                     if(write){
                         pD = wD.find(section)!=wD.end();
                         if(pD) wL.push_back(rL);
@@ -243,25 +244,40 @@ void rwFile(std::string_view file, bool write, Ini& rWD){
                 }
             }
         }
-        f.open(std::string{file}, std::ios::out | std::ios::trunc);
-        if(f.is_open()){    
-            if(fL == 2) f << "\xEF\xBB\xBF";
-            for(const std::string& wLD : wL){
-                f << wLD << (crlf && (wLD.empty() || wLD.back()!='\r') ? "\r\n" : "\n");
-            }
-            f.close();
-        }else{
-            std::cerr << "Error whilst opening " << file << " for writing!\n";
+        std::string target{file};
+        std::string tmp = target + ".tmp";
+        std::error_code ec;
+        f.open(tmp, std::ios::out | std::ios::trunc | std::ios::binary);
+        if(!f.is_open()){
+            std::cerr << "Error whilst opening " << tmp << " for writing!\n";
+            return;
+        }
+        if(fL == 2) f << "\xEF\xBB\xBF";
+        for(const std::string& wLD : wL){
+            f << wLD << (crlf && (wLD.empty() || wLD.back()!='\r') ? "\r\n" : "\n");
+        }
+        f.close();
+        if(f.fail()){    
+            std::cerr << "Error whilst writing " << tmp << ", " << target << " left untouched!\n";
+            std::filesystem::remove(tmp, ec);
+            return;
+        }
+        std::filesystem::rename(tmp, target, ec);
+        if(ec){
+            std::cerr << "Could not replace " << target << ": " << ec.message() << "\n";
+            std::filesystem::remove(tmp, ec);
         }
     }
 }
 
 void read(std::string_view file, Ini& output){
+    output.clear();
     rwFile(file, false, output);
 }
 
-void write(std::string_view file, Ini& data){
-    rwFile(file, true, data);
+void write(std::string_view file, const Ini& data){
+    Ini cD = data;
+    rwFile(file, true, cD);
 }
 
 int main(){
